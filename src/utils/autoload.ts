@@ -112,6 +112,8 @@ export async function autoload<
 
 	for (const [routeName, routeModule] of Object.entries(routeModules)) {
 		app.group(routeName as "", (groupedApp) => {
+			if (!routeModule) return groupedApp;
+
 			const mappedApp = routeModule(groupedApp);
 
 			if (generateTags) {
