@@ -1,14 +1,40 @@
 import path from "node:path";
 import fs from "node:fs";
-import type Elysia from "elysia";
-import type { DecoratorBase } from "elysia";
+import type {
+	Elysia,
+	SingletonBase,
+	DefinitionBase,
+	MetadataBase,
+	RouteBase,
+	EphemeralType,
+	MergeSchema,
+	UnwrapRoute,
+} from "elysia";
 import { transformPathToUrl } from "./transformPathToUrl";
 
-export async function autoload<Decorator extends DecoratorBase>(
-	app: Elysia<string, Decorator>,
+export async function autoload<
+	Path extends string = string,
+	Singleton extends SingletonBase = SingletonBase,
+	Definitions extends DefinitionBase = DefinitionBase,
+	Metadata extends MetadataBase = MetadataBase,
+	Routes extends RouteBase = RouteBase,
+	Ephemeral extends EphemeralType = EphemeralType,
+	Volatile extends EphemeralType = EphemeralType,
+>(
+	app: Elysia<
+		Path,
+		Singleton,
+		Definitions,
+		Metadata,
+		Routes,
+		Ephemeral,
+		Volatile
+	>,
 	routesDir: string,
 	generateTags: boolean,
-) {
+): Promise<
+	Elysia<Path, Singleton, Definitions, Metadata, Routes, Ephemeral, Volatile>
+> {
 	const dirPath = getDirPath(routesDir);
 
 	if (!fs.existsSync(dirPath))
@@ -24,7 +50,49 @@ export async function autoload<Decorator extends DecoratorBase>(
 
 	const routeModules: Record<
 		string,
-		(group: Elysia<string, Decorator>) => Elysia<string, Decorator>
+		(
+			group: Elysia<
+				`${Path}`,
+				Singleton,
+				Definitions,
+				{
+					schema: MergeSchema<
+						// biome-ignore lint/complexity/noBannedTypes: <explanation>
+						UnwrapRoute<{}, Definitions["typebox"], `${Path}`>,
+						Metadata["schema"],
+						""
+					>;
+					macro: Metadata["macro"];
+					macroFn: Metadata["macroFn"];
+					parser: Metadata["parser"];
+				},
+				// biome-ignore lint/complexity/noBannedTypes: <explanation>
+				{},
+				Ephemeral,
+				Volatile
+			>,
+		) => Elysia<
+			`${Path}`,
+			Singleton,
+			Definitions,
+			{
+				schema: MergeSchema<
+					UnwrapRoute<
+						Record<string, unknown>,
+						Definitions["typebox"],
+						`${Path}`
+					>,
+					Metadata["schema"],
+					""
+				>;
+				macro: Metadata["macro"];
+				macroFn: Metadata["macroFn"];
+				parser: Metadata["parser"];
+			},
+			Record<string, unknown>,
+			Ephemeral,
+			Volatile
+		>
 	> = {};
 	const importPromises: Promise<void>[] = [];
 
@@ -41,26 +109,21 @@ export async function autoload<Decorator extends DecoratorBase>(
 	await Promise.all(importPromises);
 
 	for (const [routeName, routeModule] of Object.entries(routeModules)) {
-		app.group<Elysia<string, Decorator>, string>(routeName, (app) => {
-			if (!routeModule) return app;
+		app.group(routeName as "", (groupedApp) => {
+			const mappedApp = routeModule(groupedApp);
 
-			const mappedApp = routeModule(app);
 			if (generateTags) {
 				for (const route of mappedApp.routes) {
-					if (route.hooks.detail) {
-						route.hooks.detail.tags = [
-							...(route.hooks.detail.tags || []),
-							routeName,
-						];
-					} else {
+					if (!route.hooks.detail) {
 						Object.assign(route.hooks, { detail: { tags: [routeName] } });
 					}
 				}
 			}
-
 			return mappedApp;
 		});
 	}
+
+	return app;
 }
 
 function getDirPath(dir: string) {
