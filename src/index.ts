@@ -1,4 +1,4 @@
-import { Elysia } from "elysia";
+import { Elysia, type AnyElysia } from "elysia";
 import { autoload } from "./utils";
 
 export interface Options {
@@ -7,7 +7,9 @@ export interface Options {
 	generateTags?: boolean;
 }
 
-export async function autoroutes(options?: Options) {
+export async function autoroutes(
+	options?: Options,
+): Promise<{ default: AnyElysia }> {
 	const { routesDir, prefix, generateTags } = {
 		...options,
 		routesDir: options?.routesDir ?? "./routes",
@@ -24,5 +26,5 @@ export async function autoroutes(options?: Options) {
 
 	await autoload(autoroutesPlugin, routesDir, generateTags);
 
-	return autoroutesPlugin;
+	return { default: autoroutesPlugin };
 }
