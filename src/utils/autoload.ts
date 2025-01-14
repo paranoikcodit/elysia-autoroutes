@@ -1,65 +1,75 @@
-import path from 'node:path'
-import fs from 'node:fs'
-import type Elysia from 'elysia'
-import type { DecoratorBase } from 'elysia'
-import { transformPathToUrl } from './transformPathToUrl'
+import path from "node:path";
+import fs from "node:fs";
+import type Elysia from "elysia";
+import type { DecoratorBase } from "elysia";
+import { transformPathToUrl } from "./transformPathToUrl";
 
-export async function autoload<Decorator extends DecoratorBase>(app: Elysia<string, Decorator>, routesDir: string, generateTags: boolean) {
-  const dirPath = getDirPath(routesDir)
+export async function autoload<Decorator extends DecoratorBase>(
+	app: Elysia<string, Decorator>,
+	routesDir: string,
+	generateTags: boolean,
+) {
+	const dirPath = getDirPath(routesDir);
 
-  if (!fs.existsSync(dirPath))
-    throw new Error(`Directory "${dirPath}" does not exist`)
+	if (!fs.existsSync(dirPath))
+		throw new Error(`Directory "${dirPath}" does not exist`);
 
-  if (!fs.statSync(dirPath).isDirectory())
-    throw new Error(`"${dirPath}" is not a directory.`)
+	if (!fs.statSync(dirPath).isDirectory())
+		throw new Error(`"${dirPath}" is not a directory.`);
 
-  const router = new Bun.FileSystemRouter({
-    style: 'nextjs',
-    dir: dirPath,
-  })
+	const router = new Bun.FileSystemRouter({
+		style: "nextjs",
+		dir: dirPath,
+	});
 
-  const routeModules: Record<string, (group: Elysia<string, Decorator>) => Elysia<string, Decorator>> = {}
-  const importPromises: Promise<void>[] = []
+	const routeModules: Record<
+		string,
+		(group: Elysia<string, Decorator>) => Elysia<string, Decorator>
+	> = {};
+	const importPromises: Promise<void>[] = [];
 
-  for (const [nextRouteName, file] of Object.entries(router.routes)) {
-    const routeName = transformPathToUrl(nextRouteName)
+	for (const [nextRouteName, file] of Object.entries(router.routes)) {
+		const routeName = transformPathToUrl(nextRouteName);
 
-    importPromises.push(
-      import(file).then((routeModule) => {
-        routeModules[routeName] = routeModule.default
-      }),
-    )
-  }
+		importPromises.push(
+			import(file).then((routeModule) => {
+				routeModules[routeName] = routeModule.default;
+			}),
+		);
+	}
 
-  await Promise.all(importPromises)
+	await Promise.all(importPromises);
 
-  for (const [routeName, routeModule] of Object.entries(routeModules)) {
-    app.group<Elysia<string, Decorator>, string>(routeName, (app) => {
-      const mappedApp = routeModule(app)
+	for (const [routeName, routeModule] of Object.entries(routeModules)) {
+		app.group<Elysia<string, Decorator>, string>(routeName, (app) => {
+			if (!routeModule) return app;
 
-      if (generateTags) {
-        mappedApp.routes.forEach((route) => {
-          if (route.hooks.detail)
-            route.hooks.detail.tags = [...route.hooks.detail.tags || [], routeName]
-          else
-            Object.assign(route.hooks, { detail: { tags: [routeName] } })
-        })
-      }
+			const mappedApp = routeModule(app);
+			if (generateTags) {
+				for (const route of mappedApp.routes) {
+					if (route.hooks.detail) {
+						route.hooks.detail.tags = [
+							...(route.hooks.detail.tags || []),
+							routeName,
+						];
+					} else {
+						Object.assign(route.hooks, { detail: { tags: [routeName] } });
+					}
+				}
+			}
 
-      return mappedApp
-    })
-  }
+			return mappedApp;
+		});
+	}
 }
 
 function getDirPath(dir: string) {
-  let dirPath: string
+	let dirPath: string;
 
-  if (path.isAbsolute(dir))
-    dirPath = dir
-  else if (path.isAbsolute(process.argv[1]))
-    dirPath = path.join(process.argv[1], '..', dir)
-  else
-    dirPath = path.join(process.cwd(), process.argv[1], '..', dir)
+	if (path.isAbsolute(dir)) dirPath = dir;
+	else if (path.isAbsolute(process.argv[1]))
+		dirPath = path.join(process.argv[1], "..", dir);
+	else dirPath = path.join(process.cwd(), process.argv[1], "..", dir);
 
-  return dirPath
+	return dirPath;
 }
