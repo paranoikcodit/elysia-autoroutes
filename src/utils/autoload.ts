@@ -57,8 +57,11 @@ export async function autoload<
 				Definitions,
 				{
 					schema: MergeSchema<
-						// biome-ignore lint/complexity/noBannedTypes: <explanation>
-						UnwrapRoute<{}, Definitions["typebox"], `${Path}`>,
+						UnwrapRoute<
+							Record<string, unknown>,
+							Definitions["typebox"],
+							`${Path}`
+						>,
 						Metadata["schema"],
 						""
 					>;
@@ -66,8 +69,7 @@ export async function autoload<
 					macroFn: Metadata["macroFn"];
 					parser: Metadata["parser"];
 				},
-				// biome-ignore lint/complexity/noBannedTypes: <explanation>
-				{},
+				Record<string, unknown>,
 				Ephemeral,
 				Volatile
 			>,
